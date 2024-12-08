@@ -388,7 +388,7 @@
 function processData(allText) {
     var allTextLines = allText.split(/\r\n|\n/);
   
-    for (var i=1; i<allTextLines.length; i++) {
+    for (var i=0; i<allTextLines.length; i++) {
         var data = allTextLines[i].split(';');
         lineasOpcionesParametros.push(data);
         

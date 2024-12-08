@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>COFACO_BLE_WEB</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="favicon.ico">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <meta charset="UTF-8">
+</head>
+<body >
+    <div class="topnav">
+        <h1>COFACO_BLE_WEB</h1>
+    </div>
+    <div class="content">
+        <div class="card-grid">
+            <div class="card">
+                <p>
+                    <button id="connectBleButton" class="connectButton"> Conectar </button>
+                    <button id="disconnectBleButton" class="disconnectButton"> Desconectar</button>
+                </p>
+                <p class="gray-label">Estado BLE: <strong><span id="bleState" style="color:#d13a30;">Deconectado</span></strong></p>
+            </div>
+        </div>
+
+        <div class="card-grid">
+            <div class="card">
+                <h2>Estado del Quemador</h2>
+                <p class="reading"><span id="valueContainer">Sin Dato</span></p>
+                <p class="reading"><span id="tiempoState">0</span>  seg </p>
+                <p class="gray-label">Ultima Lectura: <span id="timestamp"></span></p>
+            </div>
+
+            <div class="card">
+                <h2>Iniciar Encendido</h2>
+                <button id="onButton" class="onButton">ENCENDER</button>
+                <button id="abfButton" class="onButton">BAJO FUEGO</button>
+                
+            </div>
+        </div>
+        <div class="param-grid">
+           
+            <div class="param">
+                <h2>Parametros</h2>
+                
+                        <select  id="seleParm" onchange="leerParametro()" >
+                            <option value="1">TIEMPO_BARRIDO</option>
+                            <option value="2">TIEMPO_ENCENDIDO</option>
+                            <option value="3">TIEMPO_PRE_ENCENDIDO</option>
+                            <option value="4">PILOTO_SPI</option>
+                            <option value="5">TIEMPO_SQ3</option>
+                            <option value="6">TIEMPO_MAX</option>
+                            <option value="7">TIEMPO_POSTBARRIDO</option>
+                            <option value="67">TIEMPO_PAB_INICIAL</option>
+                            <option value="74">TIEMPO_AL_DET</option>
+                            <option value="93">TIEMPO_PIL_INT</option>
+                            <option value="94">TIEMPO_BUZZER</option>
+                            <option value="12">ULTIMO_ESTADO</option>
+                            <option value="13">MODO_INICIO</option>
+                            <option value="16">MODO_PAB</option>
+                            <option value="17">MODO_PGB</option>
+                            <option value="62">MODO_MOTOR</option>
+                            <option value="95">MODO_ENT_ABF</option>
+                            <option value="21">MAX_TEMP_AMB</option>
+                            <option value="22">CONTADOR_AL_CBT</option>
+                            <option value="23">CONTADOR_AL_FLL</option>
+                            <option value="26">CONTADOR_AL_PAB</option>
+                            <option value="27">CONTADOR_AL_PGB</option>
+                            <option value="29">CONTADOR_AL_TIEMPO_MAX</option>
+                            <option value="30">CONTADOR_AL_TEMP</option>
+                            <option value="31">AJUSTE_TEMP_AMB</option>
+                            <option value="44">TEMP_AMBIENTE</option>
+                            <option value="96">ACCION_CORTE_LUZ</option>
+                            <option value="97">TIPO_ENT_ABF</option>
+                        </select>
+                   
+                        
+                
+           
+                <label for="fname"> : </label>
+                <input id="parLeido" name="fname">
+                <button id="actButton" class="onButton">Actualizar</button> 
+                
+            </div>
+        
+        </div> 
+
+        
+    </div>
+           
+</body>
+
+<script language="JavaScript" type="text/javascript" src="/js/jquery-1.2.6.min.js"></script>
+
+
+<script>
+    // DOM Elements
+    const connectButton = document.getElementById('connectBleButton');
+    const disconnectButton = document.getElementById('disconnectBleButton');
+    const onButton = document.getElementById('onButton');
+    const abfButton = document.getElementById('abfButton');
+    const actButton = document.getElementById('actButton');
+   // const offButton = document.getElementById('offButton');
+    const retrievedValue = document.getElementById('valueContainer');
+   // const latestValueSent = document.getElementById('valueSent');
+    const bleStateContainer = document.getElementById('bleState');
+    const timestampContainer = document.getElementById('timestamp');
+    const timesEstadoContainer = document.getElementById('tiempoState');
+    const parametroLeido = document.getElementById('parLeido');
+    
+
+    //Define BLE Device Specs
+    var deviceName ='COFACO_BLE';
+    var bleService = 'b8d7ce51-ab47-4ff8-aa8c-2fb686bbceb3';
+    var ESTADO_CHARACTERISTIC_UUID =        "f60844f9-f620-4e3e-9c0d-e530339f9bb9"
+    var START_STOP_CHARACTERISTIC_UUID =     "eeee0cae-4c2d-4222-83fa-a82322668851"
+    var ALTO_BAJO_CHARACTERISTIC_UUID =      "be2fb044-c6a5-46a8-97b2-2a8eae7012c1"
+    var PARAMETRO_CHARACTERISTIC_UUID =      "2bbdf4a6-104a-4c6d-a625-469fe13c4b53"
+    var TIME_ESTADO_CHARACTERISTIC_UUID =     "9df5f2a4-4464-44f2-8159-bc84c218d566"
+
+    //Global Variables to Handle Bluetooth
+    var bleServer;
+    var bleServiceFound;
+    var sensorCharacteristicFound;
+    
+    
+    // Connect Button (search for BLE Devices only if BLE is available)
+    connectButton.addEventListener('click', (event) => {
+        if (isWebBluetoothEnabled()){
+            connectToDevice();
+        }
+    });
+
+    // Disconnect Button
+    disconnectButton.addEventListener('click', disconnectDevice);
+
+    // Write to the ESP32 LED Characteristic
+    onButton.addEventListener('click', () => writeOnCharacteristic(1,START_STOP_CHARACTERISTIC_UUID));
+    abfButton.addEventListener('click', () => writeOnCharacteristic(1,ALTO_BAJO_CHARACTERISTIC_UUID));
+    actButton.addEventListener('click', () => escribirParametro());
+   // offButton.addEventListener('click', () => writeOnCharacteristic(0));
+
+   $(document).ready(function() {
+    $.ajax({
+        type: "GET",
+        url: "opcionesPorParametro.csv",
+        dataType: "text",
+        success: function(data) {successFunction(data);}
+     });
+   });
+
+
+    // Check if BLE is available in your Browser
+    function isWebBluetoothEnabled() {
+        if (!navigator.bluetooth) {
+            console.log('Web Bluetooth API is not available in this browser!');
+            bleStateContainer.innerHTML = "Web Bluetooth API no esta disponible!";
+            return false
+        }
+        console.log('Web Bluetooth API supported in this browser.');
+        return true
+    }
+
+    // Connect to BLE Device and Enable Notifications
+    function connectToDevice(){
+        console.log('Initializing Bluetooth...');
+        navigator.bluetooth.requestDevice({
+           // filters: [{name: deviceName}],
+            filters: [{namePrefix: "COFACO"}],
+            optionalServices: [bleService]
+        })
+        .then(device => {
+            console.log('Device Selected:', device.name);
+            bleStateContainer.innerHTML = 'Conectado ' + device.name;
+            bleStateContainer.style.color = "#24af37";
+            device.addEventListener('gattservicedisconnected', onDisconnected);
+            return device.gatt.connect();
+        })
+        .then(gattServer =>{
+            bleServer = gattServer;
+            console.log("Connected to GATT Server");
+            return bleServer.getPrimaryService(bleService);
+        })
+        .then(service => {
+            bleServiceFound = service;
+            console.log("Service discovered:", service.uuid);
+            return service.getCharacteristic(ESTADO_CHARACTERISTIC_UUID);
+        })
+        .then(characteristic => {
+            console.log("Characteristic discovered:", characteristic.uuid);
+            sensorCharacteristicFound = characteristic;
+            characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicChange);
+            characteristic.startNotifications();
+            console.log("Notifications Started Estado.");
+            return bleServiceFound.getCharacteristic(TIME_ESTADO_CHARACTERISTIC_UUID); // characteristic.readValue();
+        })
+
+        // bleServiceFound.getCharacteristic(TIME_ESTADO_CHARACTERISTIC_UUID)
+        .then(characteristic => {
+           characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicChangeTiempo);
+           characteristic.startNotifications();
+           console.log("Notifications Started tiempo .");
+          return bleServiceFound.getCharacteristic(PARAMETRO_CHARACTERISTIC_UUID);
+        })
+        .then(characteristic => {
+           characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicChangeParametro);
+           characteristic.startNotifications();
+           console.log("Notifications Started parametro .");
+           leerParametro();
+        })
+        /*.then(value => {
+            console.log("Read value: ", value);
+            const decodedValue = new TextDecoder().decode(value);
+            console.log("Decoded value: ", decodedValue);
+            retrievedValue.innerHTML = decodedValue;
+        })*/
+        .catch(error => {
+            console.log('Error: ', error);
+        })
+    }
+
+    function onDisconnected(event){
+        console.log('Device Disconnected:', event.target.device.name);
+        bleStateContainer.innerHTML = "Desconectado";
+        bleStateContainer.style.color = "#d13a30";
+
+        connectToDevice();
+    }
+
+     function handleCharacteristicChangeTiempo(event){
+       //para el tiempo del estado en seg
+         const newValueReceived = new TextDecoder().decode(event.target.value);
+        console.log("Characteristic value changed: ", newValueReceived);
+        timesEstadoContainer.innerHTML = newValueReceived;
+     }
+
+     function handleCharacteristicChangeParametro(event){
+       //para el lectura del parametro
+         const newValueReceived = new TextDecoder().decode(event.target.value);
+        console.log("Characteristic value changed: ", newValueReceived);
+        parametroLeido.value = newValueReceived;
+     }
+
+    function handleCharacteristicChange(event){
+       //para el estado del quemador
+        const newValueReceived = new TextDecoder().decode(event.target.value);
+        console.log("Characteristic value changed: ", newValueReceived);
+        retrievedValue.innerHTML = newValueReceived;
+        timestampContainer.innerHTML = getDateTime();
+       
+        if(newValueReceived.includes("AL")){
+            onButton.innerText = "REARMAR";
+        }else  if(newValueReceived.localeCompare("LISTO")!=0){
+            onButton.innerText = "APAGAR";
+        }else{
+             onButton.innerText = "ENCENDER";
+        }
+         var BabfC = readCharacteristic(ALTO_BAJO_CHARACTERISTIC_UUID);
+        
+        
+    }
+
+    function readCharacteristic(caracteristica){
+       
+        if (bleServer && bleServer.connected) {
+            bleServiceFound.getCharacteristic(caracteristica)
+            .then(characteristic => {
+                console.log("Found the characteristic: ", characteristic.uuid);
+               
+                return characteristic.readValue();
+            })
+            .then(value => {
+                console.log("reading characteristic:", value);
+                 var abfC = new TextDecoder().decode(value);
+                 console.log("reading string:", abfC);
+                 if(abfC.localeCompare("DESACTIVADO")==0){
+                        abfButton.innerText="ALTO FUEGO";
+                    }else
+                        abfButton.innerText="BAJO FUEGO";
+                        
+            })
+            .catch(error => {
+                console.error("Error reading to characteristic: ", error);
+            });
+        } else {
+            console.error ("Bluetooth is not connected. Cannot write to characteristic.")
+            window.alert("Bluetooth no conectado. \n Debe conectarse!")
+        }
+    }
+
+    function writeOnCharacteristic(value, caracteristica){
+        
+        /*if(caracteristica.localeCompare(ALTO_BAJO_CHARACTERISTIC_UUID)==0){
+            if(abfButton.innerText.localeCompare("BAJO FUEGO")==0){
+                abfButton.innerText="ALTO FUEGO";
+            }else
+                abfButton.innerText="BAJO FUEGO";
+        }*/
+        
+        if (bleServer && bleServer.connected) {
+            bleServiceFound.getCharacteristic(caracteristica)
+            .then(characteristic => {
+                console.log("Found the characteristic: ", characteristic.uuid);
+               
+                 //const data = new Uint8Array([value]);
+                //return characteristic.writeValue(data);
+                let encoder = new TextEncoder('utf-8');
+                return characteristic.writeValue(encoder.encode(value));
+            })
+            .then(() => {
+               // latestValueSent.innerHTML = value;
+                console.log("Value written to characteristic:", value);
+            })
+            .catch(error => {
+                console.error("Error writing to characteristic: ", error);
+            });
+        } else {
+            console.error ("Bluetooth is not connected. Cannot write to characteristic.")
+            window.alert("Bluetooth no conectado. \n Debe conectarse!")
+        }
+    }
+
+    function escribirParametro(){
+        var e = document.getElementById("seleParm");
+        var dir = e.value; //direccion a leer
+        var parametro = e.options[e.selectedIndex].text;
+        var valor =  parametroLeido.value;
+        var toSend =dir.concat(",").concat(valor);
+        //escribo la direccion del parametro, 
+         console.log('ecribo el parametro:',parametro.concat(" ").concat(toSend));
+        writeOnCharacteristic(toSend, PARAMETRO_CHARACTERISTIC_UUID);
+        
+    }
+
+    function leerParametro(){
+        var e = document.getElementById("seleParm");
+        var value = e.value; //direccion a leer
+        var parametro = e.options[e.selectedIndex].text;
+        //escribo la direccion del parametro, 
+         console.log('leo el parametro:',parametro.concat(" ").concat(value));
+        
+        writeOnCharacteristic(value, PARAMETRO_CHARACTERISTIC_UUID);
+        
+    }
+
+    function disconnectDevice() {
+        console.log("Disconnect Device.");
+        if (bleServer && bleServer.connected) {
+            if (sensorCharacteristicFound) {
+                sensorCharacteristicFound.stopNotifications()
+                    .then(() => {
+                        console.log("Notifications Stopped");
+                        return bleServer.disconnect();
+                    })
+                    .then(() => {
+                        console.log("Device Disconnected");
+                        bleStateContainer.innerHTML = "Desconectado";
+                        bleStateContainer.style.color = "#d13a30";
+
+                    })
+                    .catch(error => {
+                        console.log("An error occurred:", error);
+                    });
+            } else {
+                console.log("No characteristic found to disconnect.");
+            }
+        } else {
+            // Throw an error if Bluetooth is not connected
+            console.error("Bluetooth is not connected.");
+            window.alert("Bluetooth no conectado.")
+        }
+    }
+
+    function getDateTime() {
+        var currentdate = new Date();
+        var day = ("00" + currentdate.getDate()).slice(-2); // Convert day to string and slice
+        var month = ("00" + (currentdate.getMonth() + 1)).slice(-2);
+        var year = currentdate.getFullYear();
+        var hours = ("00" + currentdate.getHours()).slice(-2);
+        var minutes = ("00" + currentdate.getMinutes()).slice(-2);
+        var seconds = ("00" + currentdate.getSeconds()).slice(-2);
+
+        var datetime = day + "/" + month + "/" + year + " at " + hours + ":" + minutes + ":" + seconds;
+        return datetime;
+    }
+
+function parseCSV(text) {
+  // Obtenemos las lineas del texto
+  let lines = text.replace(/\r/g, '').split('\n');
+  return lines.map(line => {
+    // Por cada linea obtenemos los valores
+    let values = line.split(';');
+    return values;
+  });
+}
+
+function reverseMatrix(matrix){
+  let output = [];
+  // Por cada fila
+  matrix.forEach((values, row) => {
+    // Vemos los valores y su posicion
+    values.forEach((value, col) => {
+      // Si la posición aún no fue creada
+      if (output[col] === undefined) output[col] = [];
+      output[col][row] = value;
+    });
+  });
+  return output;
+}
+
+function readFile(evt) {
+  let file = evt.target.files[0];
+  let reader = new FileReader();
+  reader.onload = (e) => {
+    // Cuando el archivo se terminó de cargar
+    let lines = parseCSV(e.target.result);
+    let output = reverseMatrix(lines);
+    console.log(output);
+  };
+  // Leemos el contenido del archivo seleccionado
+  reader.readAsBinaryString(file);
+}
+
+    
+    function successFunction(data){
+        console.log(data);   
+    }
+
+
+</script>
+
+</html>

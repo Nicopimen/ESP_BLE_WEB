@@ -121,6 +121,8 @@
     var bleServer;
     var bleServiceFound;
     var sensorCharacteristicFound;
+
+    var lineasOpcionesParametros=[];
     
     
     // Connect Button (search for BLE Devices only if BLE is available)
@@ -144,7 +146,7 @@
         type: "GET",
         url: "opcionesPorParametro.csv",
         dataType: "text",
-        success: function(data) {successFunction(data);}
+        success: function(data) {processData(data);}
      });
    });
 
@@ -383,47 +385,25 @@
         return datetime;
     }
 
-function parseCSV(text) {
-  // Obtenemos las lineas del texto
-  let lines = text.replace(/\r/g, '').split('\n');
-  return lines.map(line => {
-    // Por cada linea obtenemos los valores
-    let values = line.split(';');
-    return values;
-  });
-}
-
-function reverseMatrix(matrix){
-  let output = [];
-  // Por cada fila
-  matrix.forEach((values, row) => {
-    // Vemos los valores y su posicion
-    values.forEach((value, col) => {
-      // Si la posición aún no fue creada
-      if (output[col] === undefined) output[col] = [];
-      output[col][row] = value;
-    });
-  });
-  return output;
-}
-
-function readFile(evt) {
-  let file = evt.target.files[0];
-  let reader = new FileReader();
-  reader.onload = (e) => {
-    // Cuando el archivo se terminó de cargar
-    let lines = parseCSV(e.target.result);
-    let output = reverseMatrix(lines);
-    console.log(output);
-  };
-  // Leemos el contenido del archivo seleccionado
-  reader.readAsBinaryString(file);
-}
-
+function processData(allText) {
+    var allTextLines = allText.split(/\r\n|\n/);
+    var headers = allTextLines[0].split(',');
     
-    function successFunction(data){
-        console.log(data);   
+
+    for (var i=1; i<allTextLines.length; i++) {
+        var data = allTextLines[i].split(',');
+        if (data.length == headers.length) {
+
+            var tarr = [];
+            for (var j=0; j<headers.length; j++) {
+                tarr.push(headers[j]+":"+data[j]);
+            }
+            lineasOpcionesParametros.push(tarr);
+        }
     }
+    // alert(lineasOpcionesParametros);
+     console.log(lineasOpcionesParametros);
+}
 
 
 </script>
